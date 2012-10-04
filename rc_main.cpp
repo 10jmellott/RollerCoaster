@@ -5,6 +5,7 @@
 
 #include <stdio.h>     // Standard Header For Most Programs
 #include <stdlib.h>    // Additional standard Functions (exit() for example)
+#include <math.h>
 
 #ifdef __APPLE__
 
@@ -56,7 +57,7 @@ GLfloat currentView[3] = {0.0, 0.0, 0.0};
 // if the skybox is to be scaled
 #define SCALE_SKYBOX 0
 
-#define DRAW_SKYBOX 1
+#define DRAW_SKYBOX 0
 #define DRAW_TRACK 1
 
 // defined to remove the black edges along the textures
@@ -127,20 +128,22 @@ void mousebutton(int button, int state, int x, int y);
 /* this will draw the skybox */
 GLvoid drawSkybox();
 
+/* this will draw the track */
 GLvoid drawTrack();
+#define TRACK_DENSITY 60			// number of points registered between control points
+GLuint track;
+GLuint max_point;
+Vec3f *track_view = NULL;
+GLfloat *velocity = NULL;
+GLuint track_point = 0;
+GLuint track_dir = 1;			// 1 is forward, -1 is backward
 
+/* this function is to be used to animate the roller coaster's movement */
+GLvoid Timer(int iunused);
 
 // The ubiquituous main function.
 int main ( int argc, char** argv )   // Create Main Function For Bringing It All Together
 {
-	// get the the filename from the commandline.
-	/*if (argc!=2)
-	{
-		printf("usage: %s trackfilname\n", argv[0]);
-		system("PAUSE");
-		exit(1);
-	}*/
-
 	/* load the track, this routine aborts if it fails */
 	g_Track.loadSplineFrom("track");
 
@@ -171,6 +174,7 @@ int main ( int argc, char** argv )   // Create Main Function For Bringing It All
 	/* Set idle function.  You can change this to call code for your animation,
 	* or place your animation code in doIdle */
 	glutIdleFunc(doIdle);
+
 	/* callback for keyboard input */
 	glutKeyboardFunc(keyboardfunc);
 
@@ -191,7 +195,11 @@ int main ( int argc, char** argv )   // Create Main Function For Bringing It All
 	/* Attach menu to right button clicks */
 	glutAttachMenu(GLUT_RIGHT_BUTTON);
 
-	glutMainLoop ( );          // Initialize The Main Loop
+	Timer(0);				// this is the animation trigger
+
+	glutMainLoop ( );       // Initialize The Main Loop
+
+	free(track_view);
 
 	return 0;
 }
@@ -238,8 +246,12 @@ void InitGL ( GLvoid )     // Create Some Everyday Functions
 	loadTexture("texture/sky25/up.jpg", topTextureId);
 	loadTexture("texture/sky25/down.jpg", bottomTextureId);
 
-	/*if you plan to use Display lists this is a good place to
-	create them  !!!YOU MUST HAVE A DISPLAY LIST FOR YOUR TRACK!!!*/
+	glPointSize(3.0);
+
+	track = glGenLists(1);
+	glNewList(track, GL_COMPILE);
+	drawTrack();
+	glEndList();
 }
 
 void reshape(int w, int h)
@@ -248,7 +260,7 @@ void reshape(int w, int h)
 	glViewport(0,0,w,h);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	gluPerspective(60, aspect, 0.1, 10000.0);
+	gluPerspective(60, aspect, 1, 500.0);
 	glMatrixMode(GL_MODELVIEW);
 }
 
@@ -272,12 +284,12 @@ void display ( void )   // Create The Display Function
 	/* draw skybox */
 
 	if(DRAW_SKYBOX)
-		drawSkybox();
+		drawSkybox();	
 
 	if(DRAW_TRACK)
-		drawTrack();
+		glCallList(track);
 
-		/* Swap buffers, so one we just drew is displayed */
+	/* Swap buffers, so one we just drew is displayed */
 	glutSwapBuffers();
 }
 
@@ -314,26 +326,28 @@ void mousedrag(int x, int y)
 	/* Check which state we are in. */
 	switch (currentControlState)
 	{
+		/*
 	case TRANSLATE:
 		if (leftMouseButtonState)
 		{
 			float theta = PI - currentViewAngle[0];
-			
+
 			// move mouse left or right
-			currentTranslation[0] -= (mousePosChange[0] * sin(theta)) * 0.3;
-			currentTranslation[1] -= (mousePosChange[0] * cos(theta)) * 0.3;
+			currentTranslation[0] -= (mousePosChange[0] * sin(theta)) * 0.01;
+			currentTranslation[1] -= (mousePosChange[0] * cos(theta)) * 0.01;
 
 			theta = currentViewAngle[0];
 
 			// move mouse up or down
-			currentTranslation[0] += (mousePosChange[1] * cos(theta)) * 0.3;
-			currentTranslation[1] += (mousePosChange[1] * sin(theta)) * 0.3;
+			currentTranslation[0] += (mousePosChange[1] * cos(theta)) * 0.01;
+			currentTranslation[1] += (mousePosChange[1] * sin(theta)) * 0.01;
 		}
 		if (middleMouseButtonState)
 		{
-			currentTranslation[2] += mousePosChange[1]*0.3;
+			currentTranslation[2] += mousePosChange[1]*0.01;
 		}
 		break;
+		*/
 	case ROTATE:
 		if (leftMouseButtonState)
 		{
@@ -417,18 +431,18 @@ void mousebutton(int button, int state, int x, int y)
 GLvoid drawSkybox()
 {
 	// Store the current matrix
-    glPushMatrix();
- 
-    // Reset and transform the matrix.
-    glLoadIdentity();
+	glPushMatrix();
+
+	// Reset and transform the matrix.
+	glLoadIdentity();
 
 	// sets the viewing angle to the values calculated in display()
 	gluLookAt(0, 0, 0, currentView[0], currentView[1], currentView[2], 0, 0, 1);
- 
-    // Enable/Disable features
-    glPushAttrib(GL_ENABLE_BIT);
-    glEnable(GL_TEXTURE_2D);
-    glDisable(GL_DEPTH_TEST);
+
+	// Enable/Disable features
+	glPushAttrib(GL_ENABLE_BIT);
+	glEnable(GL_TEXTURE_2D);
+	glDisable(GL_DEPTH_TEST);
 
 	if(SCALE_SKYBOX)
 		glScalef(currentScaling[0], currentScaling[1], currentScaling[1]);
@@ -542,47 +556,166 @@ GLvoid drawSkybox()
 	glTexCoord2fv(t4);
 	glVertex3fv(v8);
 	glEnd();
-	
+
 	glDisable(GL_TEXTURE_2D);
 
-	 // Restore enable bits and matrix
-    glPopAttrib();
-    glPopMatrix();
+	// Restore enable bits and matrix
+	glPopAttrib();
+	glPopMatrix();
 }
 
 GLvoid drawTrack()
 {
-	/* 
-	!!!! This is just an example code that draws the control points on the screen
-	only to be sure that this starter code actually loads the spline data
-	and also shows you how to iterate through the spline points !!!
+	/*
+	{{1, u, u^2, u^3}}*{{0, 1, 0, 0}, {-t, 0, t, 0}, {2t, t-3, 3-2t, -t}, {-t, 2-t, t-2, t}} =>
+	{{
+	-(t u) + 2 t u^2 - t u^3,
+	1 + (-3 + t) u^2 + (2 - t) u^3,
+	t u + (3 - 2 t) u^2 + (-2 + t) u^3,
+	-(t u^2) + t u^3
+	}}
+	*{{A1, A2, A3}, {B1, B2, B3}, {C1, C2, C3}, {D1, D2, D3}} =>
+	Catmull-Rom Spline => with the help of Wolfram Alpha
+	{{  
+	B1 (1 + (-3 + t) u^2 + (2 - t) u^3) + C1 (t u + (3 - 2 t) u^2 + (-2 + t) u^3) + A1 (-(t u) + 2 t u^2 - t u^3) + D1 (-(t u^2) + t u^3),
+	B2 (1 + (-3 + t) u^2 + (2 - t) u^3) + C2 (t u + (3 - 2 t) u^2 + (-2 + t) u^3) + A2 (-(t u) + 2 t u^2 - t u^3) + D2 (-(t u^2) + t u^3),
+	B3 (1 + (-3 + t) u^2 + (2 - t) u^3) + C3 (t u + (3 - 2 t) u^2 + (-2 + t) u^3) + A3 (-(t u) + 2 t u^2 - t u^3) + D3 (-(t u^2) + t u^3)}}
 
-	You have to replace it by the actual code for the rollercoaster ride and use the
-	control points to actually define a spline trajectory.
+	Prototype Call
+	Vec3f mov(
+		B.x() * (1 + (-3 + t) * pow(u, 2) + (2 - t) * pow(u, 3)) + C.x() * (t * u + (3 - 2 * t) * pow(u, 2) + (-2 + t) * pow(u, 3)) + 
+		A.x() * (-(t * u) + 2 * t * pow(u, 2) - t * pow(u, 3)) + D.x() * (-(t * pow(u, 2)) + t * pow(u, 3)),
+		B.y() * (1 + (-3 + t) * pow(u, 2) + (2 - t) * pow(u, 3)) + C.y() * (t * u + (3 - 2 * t) * pow(u, 2) + (-2 + t) * pow(u, 3)) + 
+		A.y() * (-(t * u) + 2 * t * pow(u, 2) - t * pow(u, 3)) + D.y() * (-(t * pow(u, 2)) + t * pow(u, 3)),
+		B.z() * (1 + (-3 + t) * pow(u, 2) + (2 - t) * pow(u, 3)) + C.z() * (t * u + (3 - 2 * t) * pow(u, 2) + (-2 + t) * pow(u, 3)) + 
+		A.z() * (-(t * u) + 2 * t * pow(u, 2) - t * pow(u, 3)) + D.z() * (-(t * pow(u, 2)) + t * pow(u, 3))
+		);
+	
 	*/
+ 
+	int track_len = 0;
 
-	glBegin(GL_LINE_STRIP);
-	Vec3f currentpos(0,0,0);
+	for(pointVectorIter ptsiter = g_Track.points().begin(); ptsiter  !=  g_Track.points().end(); ptsiter++)
+		track_len++;
 
-	//glVertex3f(currentpos.x(),currentpos.y(),currentpos.z());
+	max_point = (TRACK_DENSITY + 1) * track_len;
+	track_view = (Vec3f *)calloc(max_point, sizeof(Vec3f));
+	velocity = (GLfloat *)calloc(max_point + 1, sizeof(GLfloat));
+	int track_point = 0;
 
-	/* Here is the interesting example: iterate throught  the points */
+	
+
+ 	glPointSize(3.0);
+	glBegin(GL_POINTS);
+	
+	Vec3f A, B, C, D;
+	Vec3f curpos(0.0, 0.0, 0.0);
+	pointVectorIter ptsiter2 = g_Track.points().begin();
+	pointVectorIter ptsIter3 = g_Track.points().end();
+	ptsIter3--;
+
+	GLfloat t = 0.5;
+	GLfloat u;
+
+	velocity[track_point] = 10;				// initial speed
+
 	for(pointVectorIter ptsiter = g_Track.points().begin(); ptsiter  !=  g_Track.points().end(); ptsiter++)
 	{
-		/* get the next point from the iterator */
-		Vec3f pt(*ptsiter);
-		pointVectorIter ptsiter2 = ptsiter;
-		//cout<<ptsiter<<" "<<ptsiter2;
-		//Vec3f pt2(*ptsiter2);
+		/* denotes the control points at any given iteration */
+		if(ptsiter+1 == g_Track.points().end())
+		{
+			A = *(ptsiter + 0) + curpos;
+			B = *(ptsiter2 + 0) + A;
+			C = *(ptsiter2 + 1) + B;
+			D = *(ptsiter2 + 2) + C;
+		}
+		else if(ptsiter+2 == g_Track.points().end())
+		{
+			A = *(ptsiter + 0) + curpos;
+			B = *(ptsiter + 1) + A;
+			C = *(ptsiter2 + 0) + B;
+			D = *(ptsiter2 + 1) + C;
+		}
+		else if(ptsiter+3 == g_Track.points().end())
+		{
+			A = *(ptsiter + 0) + curpos;
+			B = *(ptsiter + 1) + A;
+			C = *(ptsiter + 2) + B;
+			D = *(ptsiter2 + 0) + C;
+		}
+		else
+		{
+			A = *(ptsiter + 0) + curpos;
+			B = *(ptsiter + 1) + A;
+			C = *(ptsiter + 2) + B;
+			D = *(ptsiter + 3) + C;
+		}
 
-		/* now just the uninteresting code that is no use at all for this project */
-		currentpos += pt;
-		glColor3f(1,1,1);
-		glVertex3f(currentpos.x(),currentpos.y(),currentpos.z());
-		//Vec3f foo = currentpos + pt2;
-		//glVertex3f(foo.x(),foo.y(),foo.z());
+		for(int i = 0; i <= TRACK_DENSITY; i++)
+		{
+			u = (GLfloat)(i) / (GLfloat)(TRACK_DENSITY);
+			
+			Vec3f point(
+				B.x() * (1 + (-3 + t) * pow(u, 2) + (2 - t) * pow(u, 3)) + 
+				C.x() * (t * u + (3 - 2 * t) * pow(u, 2) + (-2 + t) * pow(u, 3)) + 
+				A.x() * (-(t * u) + 2 * t * pow(u, 2) - t * pow(u, 3)) + 
+				D.x() * (-(t * pow(u, 2)) + t * pow(u, 3)),
+
+				B.y() * (1 + (-3 + t) * pow(u, 2) + (2 - t) * pow(u, 3)) + 
+				C.y() * (t * u + (3 - 2 * t) * pow(u, 2) + (-2 + t) * pow(u, 3)) + 
+				A.y() * (-(t * u) + 2 * t * pow(u, 2) - t * pow(u, 3)) + 
+				D.y() * (-(t * pow(u, 2)) + t * pow(u, 3)),
+
+				B.z() * (1 + (-3 + t) * pow(u, 2) + (2 - t) * pow(u, 3)) + 
+				C.z() * (t * u + (3 - 2 * t) * pow(u, 2) + (-2 + t) * pow(u, 3)) + 
+				A.z() * (-(t * u) + 2 * t * pow(u, 2) - t * pow(u, 3)) + 
+				D.z() * (-(t * pow(u, 2)) + t * pow(u, 3))
+			);
+
+			track_view[track_point++]  = Vec3f(point);
+
+			float det = pow(velocity[track_point-1], 2) - 18.6 * (track_view[track_point-1].z() - track_view[track_point].z());
+			if(det < 0)
+				velocity[track_point] = -1 * sqrt(abs(det));
+			else
+				velocity[track_point] = sqrt(det);
+
+			
+			glColor3f(0,1,1);
+			glVertex3f(point.x(), point.y(), point.z());
+		}
+
+		/* draw control point */
+		curpos+=*ptsiter;
+		//glColor3f(1,1,1);
+		//glVertex3f(curpos.x(), curpos.y(), curpos.z());
+		
 
 	}
 
 	glEnd();
+}
+
+GLvoid Timer(int iunused)
+{
+	currentTranslation[0] = track_view[track_point].x();
+	currentTranslation[1] = track_view[track_point].y();
+	currentTranslation[2] = track_view[track_point].z() + .05;
+
+	if(velocity[track_point] <= 0)
+		track_dir*=-1;
+	
+
+	if(track_point > max_point - 1)
+			track_point = 0;
+	else if(track_point == 0)
+			track_point = max_point;
+	
+	track_point+=track_dir;
+	
+	
+	glutPostRedisplay();
+
+	printf("%f\n", velocity[track_point]);
+	glutTimerFunc((200 / abs(velocity[track_point])), Timer, 0);
 }

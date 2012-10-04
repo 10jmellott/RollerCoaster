@@ -1,4 +1,5 @@
 #Readme on RollerCoaster#
+######https://github.com/kinikibu/RollerCoaster######
 
 ##information##
 ```
@@ -29,6 +30,26 @@ Started
 
 
 ##progress##
+###Ver. 1###
+Code has been heavily reworked!
+
+For the Track
++ Track is now in a display list
++ Track points have values stored in ```*track_view```
++ Catmull-Rom splines have been implemented
++ there are ```TRACK_DENSITY``` sub-points created with spline
+
+Physics added
++ physics is not completed as of yet, still a few problems
++ track requires an initial velocity
++ track will turn around if it does not have enough velocity
++ Velocities at various points are recorded in ```*velocity```
+
+Animation
++ Animation uses a focused ```glutTimerFunc()``` for its animation
++ The animation uses the vector ```track_view```
++ Animation is located in ```Timer(int iunused)```
+
 ###Ver. 0###
 + Starter code looked over and analyzed
 + Control system from Heightmap program has been transferred
