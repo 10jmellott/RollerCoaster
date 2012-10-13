@@ -129,8 +129,9 @@ void mousebutton(int button, int state, int x, int y);
 GLvoid drawSkybox();
 
 /* this will draw the track */
-GLvoid drawTrack();
+GLvoid drawTrack(float initx, float inity, float initz, int regpoints);
 #define TRACK_DENSITY 60			// number of points registered between control points
+#define TRACK_WIDTH 0.5
 GLuint track;
 GLuint max_point;
 Vec3f *track_view = NULL;
@@ -250,7 +251,9 @@ void InitGL ( GLvoid )     // Create Some Everyday Functions
 
 	track = glGenLists(1);
 	glNewList(track, GL_COMPILE);
-	drawTrack();
+	drawTrack(-TRACK_WIDTH, 0, 0, 0);
+	drawTrack(0, 0, 0, 1);
+	drawTrack(TRACK_WIDTH, 0, 0, 0);
 	glEndList();
 }
 
@@ -564,7 +567,7 @@ GLvoid drawSkybox()
 	glPopMatrix();
 }
 
-GLvoid drawTrack()
+GLvoid drawTrack(float initx, float inity, float initz, int regpoints)
 {
 	/*
 	{{1, u, u^2, u^3}}*{{0, 1, 0, 0}, {-t, 0, t, 0}, {2t, t-3, 3-2t, -t}, {-t, 2-t, t-2, t}} =>
@@ -593,15 +596,22 @@ GLvoid drawTrack()
 	
 	*/
  
-	int track_len = 0;
+	if(regpoints)
+	{
+		int track_len = 0;
 
-	for(pointVectorIter ptsiter = g_Track.points().begin(); ptsiter  !=  g_Track.points().end(); ptsiter++)
-		track_len++;
+		for(pointVectorIter ptsiter = g_Track.points().begin(); ptsiter  !=  g_Track.points().end(); ptsiter++)
+			track_len++;
 
-	max_point = (TRACK_DENSITY + 1) * track_len;
-	track_view = (Vec3f *)calloc(max_point, sizeof(Vec3f));
-	velocity = (GLfloat *)calloc(max_point + 1, sizeof(GLfloat));
-	int track_point = 0;
+		max_point = (TRACK_DENSITY + 1) * track_len;
+		track_view = (Vec3f *)calloc(max_point, sizeof(Vec3f));
+		velocity = (GLfloat *)calloc(max_point + 1, sizeof(GLfloat));
+
+		int track_point = 0;
+
+		velocity[track_point] = 10;				// initial speed
+	}
+	
 
 	
 
@@ -609,7 +619,7 @@ GLvoid drawTrack()
 	glBegin(GL_POINTS);
 	
 	Vec3f A, B, C, D;
-	Vec3f curpos(0.0, 0.0, 0.0);
+	Vec3f curpos(initx, inity, initz);							// initial position of the track rail
 	pointVectorIter ptsiter2 = g_Track.points().begin();
 	pointVectorIter ptsIter3 = g_Track.points().end();
 	ptsIter3--;
@@ -617,7 +627,7 @@ GLvoid drawTrack()
 	GLfloat t = 0.5;
 	GLfloat u;
 
-	velocity[track_point] = 10;				// initial speed
+	
 
 	for(pointVectorIter ptsiter = g_Track.points().begin(); ptsiter  !=  g_Track.points().end(); ptsiter++)
 	{
@@ -672,25 +682,25 @@ GLvoid drawTrack()
 				D.z() * (-(t * pow(u, 2)) + t * pow(u, 3))
 			);
 
-			track_view[track_point++]  = Vec3f(point);
+			if(regpoints)
+			{
+				track_view[track_point++]  = Vec3f(point);
 
-			float det = pow(velocity[track_point-1], 2) - 18.6 * (track_view[track_point-1].z() - track_view[track_point].z());
-			if(det < 0)
-				velocity[track_point] = -1 * sqrt(abs(det));
-			else
-				velocity[track_point] = sqrt(det);
+				float det = pow(velocity[track_point-1], 2) - 18.6 * (track_view[track_point-1].z() - track_view[track_point].z());
+				if(det < 0)
+					velocity[track_point] = -1 * sqrt(abs(det));
+				else
+					velocity[track_point] = sqrt(det);
+			}
+			
 
 			
 			glColor3f(0,1,1);
 			glVertex3f(point.x(), point.y(), point.z());
 		}
 
-		/* draw control point */
+		// increment the positional control point
 		curpos+=*ptsiter;
-		//glColor3f(1,1,1);
-		//glVertex3f(curpos.x(), curpos.y(), curpos.z());
-		
-
 	}
 
 	glEnd();
@@ -700,22 +710,23 @@ GLvoid Timer(int iunused)
 {
 	currentTranslation[0] = track_view[track_point].x();
 	currentTranslation[1] = track_view[track_point].y();
-	currentTranslation[2] = track_view[track_point].z() + .05;
+	currentTranslation[2] = track_view[track_point].z() + 0.02;
 
+	/*
 	if(velocity[track_point] <= 0)
 		track_dir*=-1;
 	
+	track_point+=track_dir;
+	*/
+
+	track_point++;
 
 	if(track_point > max_point - 1)
 			track_point = 0;
 	else if(track_point == 0)
 			track_point = max_point;
 	
-	track_point+=track_dir;
-	
-	
 	glutPostRedisplay();
 
-	printf("%f\n", velocity[track_point]);
-	glutTimerFunc((200 / abs(velocity[track_point])), Timer, 0);
+	glutTimerFunc(40, Timer, 0);
 }

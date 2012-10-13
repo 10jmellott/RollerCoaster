@@ -30,6 +30,12 @@ Started
 
 
 ##progress##
+###Ver. 1.5###
+Code has not been altered much. This submission won't be as visible in the code.
+Instead I worked out the values for the rails(perpendicular rails) on paper.
+Also I managed to sort out the basic problems with the velocity, which is 
+a constant at this point.
+
 ###Ver. 1###
 Code has been heavily reworked!
 
