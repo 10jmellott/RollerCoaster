@@ -57,11 +57,12 @@ GLfloat currentView[3] = {0.0, 0.0, 0.0};
 // if the skybox is to be scaled
 #define SCALE_SKYBOX 0
 
-#define DRAW_SKYBOX 0
+#define DRAW_SKYBOX 1
 #define DRAW_TRACK 1
 
 // defined to remove the black edges along the textures
 #define GL_CLAMP_TO_EDGE 0x812F
+#define GL_DEPTH_CLAMP 0x864F
 
 /* Texture ids */
 GLuint frontTextureId;
@@ -129,18 +130,22 @@ void mousebutton(int button, int state, int x, int y);
 GLvoid drawSkybox();
 
 /* this will draw the track */
-GLvoid drawTrack(float initx, float inity, float initz, int regpoints);
-#define TRACK_DENSITY 60			// number of points registered between control points
-#define TRACK_WIDTH 0.5
+GLvoid drawTrack();
+#define TRACK_DENSITY 80			// number of points registered between control points
+#define TRACK_WIDTH 0.02
 GLuint track;
 GLuint max_point;
 Vec3f *track_view = NULL;
 GLfloat *velocity = NULL;
 GLuint track_point = 0;
-GLuint track_dir = 1;			// 1 is forward, -1 is backward
+int track_len = 0;
+float max_vel = 10;
 
 /* this function is to be used to animate the roller coaster's movement */
 GLvoid Timer(int iunused);
+
+/* this code is taken from https://github.com/curran/renderCyliner.git */
+void renderCylinder_convenient(float x1, float y1, float z1, float x2,float y2, float z2, float radius,int subdivisions);
 
 // The ubiquituous main function.
 int main ( int argc, char** argv )   // Create Main Function For Bringing It All Together
@@ -157,7 +162,7 @@ int main ( int argc, char** argv )   // Create Main Function For Bringing It All
 	glutInit(&argc,argv);
 
 	/* Set up window modes */
-	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
 	/* Set window position (where it will appear when it opens) */
 	glutInitWindowPosition(0,0);
 	/* Set size of window */
@@ -193,6 +198,7 @@ int main ( int argc, char** argv )   // Create Main Function For Bringing It All
 	glutSetMenu(g_iMenuId);
 	/* Add quit option to menu */
 	glutAddMenuEntry("Quit",0);
+	glutAddMenuEntry("Diag", 1);
 	/* Attach menu to right button clicks */
 	glutAttachMenu(GLUT_RIGHT_BUTTON);
 
@@ -234,10 +240,38 @@ void loadTexture (char *filename, GLuint &textureID)
 	pic_free(pBitMap); // now that the texture has been copied by OpenGL we can free our copy
 }
 
+void InitLighting()
+{
+	GLfloat mat_specular[] = { 1.0, 1.0, 1.0, 1.0 };
+    GLfloat mat_shininess[] = { 50.0 };
+
+    GLfloat color1[] = {0.3, 0.3, 0.1};
+    GLfloat color2[] = {1.0, 0.0, 0.0};
+    GLfloat color3[] = {1.0, 1.0, 0.0};
+
+	glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+    
+
+    glLightfv(GL_LIGHT0, GL_AMBIENT, color1);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, color2);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, color3);
+
+	glEnable(GL_LIGHTING);
+    glEnable(GL_LIGHT0);
+}
+
+void InitAntiAlias()
+{
+	glEnable (GL_LINE_SMOOTH);
+    glEnable (GL_BLEND);
+    glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glHint (GL_LINE_SMOOTH_HINT, GL_DONT_CARE);
+}
+
 void InitGL ( GLvoid )     // Create Some Everyday Functions
 {
-
-	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);				// Black Background
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);				// Black Background
 
 	// load textures
 	loadTexture("texture/sky25/front.jpg", frontTextureId);
@@ -247,13 +281,17 @@ void InitGL ( GLvoid )     // Create Some Everyday Functions
 	loadTexture("texture/sky25/up.jpg", topTextureId);
 	loadTexture("texture/sky25/down.jpg", bottomTextureId);
 
-	glPointSize(3.0);
+	InitLighting();
+	InitAntiAlias();
+
+	glEnable(GL_NORMALIZE);
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_DEPTH_CLAMP);
+	//glPointSize(3.0);
 
 	track = glGenLists(1);
 	glNewList(track, GL_COMPILE);
-	drawTrack(-TRACK_WIDTH, 0, 0, 0);
-	drawTrack(0, 0, 0, 1);
-	drawTrack(TRACK_WIDTH, 0, 0, 0);
+	drawTrack();
 	glEndList();
 }
 
@@ -263,7 +301,7 @@ void reshape(int w, int h)
 	glViewport(0,0,w,h);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	gluPerspective(60, aspect, 1, 500.0);
+	gluPerspective(60, aspect, 0.1, 500.0);
 	glMatrixMode(GL_MODELVIEW);
 }
 
@@ -284,13 +322,27 @@ void display ( void )   // Create The Display Function
 	/* Clear buffers */
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	/* draw skybox */
+	/* create light local to scene */
+	GLfloat light_position[] = { 0.0, 0.0, 1.0, 0.0 };
+	glLightfv(GL_LIGHT0, GL_POSITION, light_position);
 
+	/* draw skybox */
 	if(DRAW_SKYBOX)
 		drawSkybox();	
 
+	/* draw track */
 	if(DRAW_TRACK)
 		glCallList(track);
+
+	glPushMatrix();
+	//glLoadIdentity();
+	GLfloat mat_shininess[] = { 10.0 };
+	glMaterialfv(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+	glTranslatef(10, 10, -10);
+	glutSolidSphere(1, 20, 20);
+	glTranslatef(-20, -20, 0);
+	glutSolidSphere(1, 20, 20);
+	glPopMatrix();
 
 	/* Swap buffers, so one we just drew is displayed */
 	glutSwapBuffers();
@@ -311,13 +363,14 @@ void menufunc(int value)
 	case 0:
 		exit(0);
 		break;
+	case 1:
+		printf("Diagnostic: %f, %f, %f\n", currentView[0], currentView[1], currentView[2]);
+		break;
 	}
 }
 
 void doIdle()
 {
-	/* do some stuff... */
-
 	/* make the screen update. */
 	glutPostRedisplay();
 }
@@ -329,7 +382,7 @@ void mousedrag(int x, int y)
 	/* Check which state we are in. */
 	switch (currentControlState)
 	{
-		/*
+		
 	case TRANSLATE:
 		if (leftMouseButtonState)
 		{
@@ -350,7 +403,7 @@ void mousedrag(int x, int y)
 			currentTranslation[2] += mousePosChange[1]*0.01;
 		}
 		break;
-		*/
+		
 	case ROTATE:
 		if (leftMouseButtonState)
 		{
@@ -446,6 +499,7 @@ GLvoid drawSkybox()
 	glPushAttrib(GL_ENABLE_BIT);
 	glEnable(GL_TEXTURE_2D);
 	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_LIGHTING);
 
 	if(SCALE_SKYBOX)
 		glScalef(currentScaling[0], currentScaling[1], currentScaling[1]);
@@ -567,7 +621,7 @@ GLvoid drawSkybox()
 	glPopMatrix();
 }
 
-GLvoid drawTrack(float initx, float inity, float initz, int regpoints)
+GLvoid drawTrack()
 {
 	/*
 	{{1, u, u^2, u^3}}*{{0, 1, 0, 0}, {-t, 0, t, 0}, {2t, t-3, 3-2t, -t}, {-t, 2-t, t-2, t}} =>
@@ -595,39 +649,32 @@ GLvoid drawTrack(float initx, float inity, float initz, int regpoints)
 		);
 	
 	*/
- 
-	if(regpoints)
-	{
-		int track_len = 0;
+	glPushMatrix();
 
-		for(pointVectorIter ptsiter = g_Track.points().begin(); ptsiter  !=  g_Track.points().end(); ptsiter++)
-			track_len++;
+	for(pointVectorIter ptsiter = g_Track.points().begin(); ptsiter  !=  g_Track.points().end(); ptsiter++)
+		track_len++;
 
-		max_point = (TRACK_DENSITY + 1) * track_len;
-		track_view = (Vec3f *)calloc(max_point, sizeof(Vec3f));
-		velocity = (GLfloat *)calloc(max_point + 1, sizeof(GLfloat));
+	max_point = (TRACK_DENSITY + 1) * track_len;
+	track_view = (Vec3f *)calloc(max_point, sizeof(Vec3f));
+	velocity = (GLfloat *)calloc(max_point + 1, sizeof(GLfloat));
 
-		int track_point = 0;
+	int track_point = 0;
 
-		velocity[track_point] = 10;				// initial speed
-	}
-	
-
-	
-
- 	glPointSize(3.0);
-	glBegin(GL_POINTS);
+	track_view[track_point] = Vec3f(0, 0, 0);
 	
 	Vec3f A, B, C, D;
-	Vec3f curpos(initx, inity, initz);							// initial position of the track rail
+	Vec3f curpos(0.0, 0.0, 0.0);							// initial position of the track rail
 	pointVectorIter ptsiter2 = g_Track.points().begin();
 	pointVectorIter ptsIter3 = g_Track.points().end();
 	ptsIter3--;
 
+
+	velocity[track_point] = 0;				// initial speed
+
 	GLfloat t = 0.5;
 	GLfloat u;
 
-	
+	track_point++;
 
 	for(pointVectorIter ptsiter = g_Track.points().begin(); ptsiter  !=  g_Track.points().end(); ptsiter++)
 	{
@@ -661,10 +708,15 @@ GLvoid drawTrack(float initx, float inity, float initz, int regpoints)
 			D = *(ptsiter + 3) + C;
 		}
 
+		glColor3f(0,1,1);
+		renderCylinder_convenient(A.x(), A.y(), A.z(), -10, -10, -10, TRACK_WIDTH, 30);
+		renderCylinder_convenient(A.x(), A.y(), A.z(), 10, 10, -10, TRACK_WIDTH, 30);
+
 		for(int i = 0; i <= TRACK_DENSITY; i++)
 		{
 			u = (GLfloat)(i) / (GLfloat)(TRACK_DENSITY);
 			
+			/* use the catmull rom spline */
 			Vec3f point(
 				B.x() * (1 + (-3 + t) * pow(u, 2) + (2 - t) * pow(u, 3)) + 
 				C.x() * (t * u + (3 - 2 * t) * pow(u, 2) + (-2 + t) * pow(u, 3)) + 
@@ -682,51 +734,111 @@ GLvoid drawTrack(float initx, float inity, float initz, int regpoints)
 				D.z() * (-(t * pow(u, 2)) + t * pow(u, 3))
 			);
 
-			if(regpoints)
+			/* each point is registered as a point to move the camera along */
+			track_view[track_point]  = Vec3f(point);
+			
+			/* velocity at any given point of the track */
+			float det = pow(velocity[track_point-1], 2) + 18.6 * (track_view[track_point-1].z() - track_view[track_point].z());
+			if(det < 0)
+				velocity[track_point] = -1 * sqrt(abs(det));
+			else
+				velocity[track_point] = sqrt(det);
+			
+			if(velocity[track_point] < velocity[0])
+				velocity[track_point] = 0;
+
+			if(velocity[track_point] > max_vel)
+				max_vel = velocity[track_point];
+
+			// create the tracks
+			glColor3f(0.0,0.0,0.0);
+			if(track_point != 1)
 			{
-				track_view[track_point++]  = Vec3f(point);
-
-				float det = pow(velocity[track_point-1], 2) - 18.6 * (track_view[track_point-1].z() - track_view[track_point].z());
-				if(det < 0)
-					velocity[track_point] = -1 * sqrt(abs(det));
-				else
-					velocity[track_point] = sqrt(det);
+				renderCylinder_convenient(track_view[track_point-1].x(), track_view[track_point-1].y(), track_view[track_point-1].z(), track_view[track_point].x(), track_view[track_point].y(), track_view[track_point].z(), TRACK_WIDTH, 30);
+				renderCylinder_convenient(track_view[track_point].x(), track_view[track_point].y(), track_view[track_point].z(), track_view[track_point-1].x(), track_view[track_point-1].y(), track_view[track_point-1].z(), TRACK_WIDTH, 30);
 			}
-			
 
-			
-			glColor3f(0,1,1);
-			glVertex3f(point.x(), point.y(), point.z());
+			track_point++;
+			glColor3f(0.0, 1.0, 0.0);
+
+			//glVertex3f(point.x(), point.y(), point.z());
 		}
 
 		// increment the positional control point
 		curpos+=*ptsiter;
 	}
 
-	glEnd();
+	glPopMatrix();
 }
 
 GLvoid Timer(int iunused)
 {
 	currentTranslation[0] = track_view[track_point].x();
 	currentTranslation[1] = track_view[track_point].y();
-	currentTranslation[2] = track_view[track_point].z() + 0.02;
-
-	/*
-	if(velocity[track_point] <= 0)
-		track_dir*=-1;
-	
-	track_point+=track_dir;
-	*/
+	currentTranslation[2] = track_view[track_point].z() + 5 * TRACK_WIDTH;
 
 	track_point++;
 
-	if(track_point > max_point - 1)
+	if(track_point > max_point)
+	{
+		char sel;
+		printf("Ride is over, would you like to ride again(y or n): ");
+		cin >> sel;
+		if(sel == 'y')
 			track_point = 0;
-	else if(track_point == 0)
-			track_point = max_point;
+		else
+			exit(EXIT_SUCCESS);
+	}
 	
 	glutPostRedisplay();
 
-	glutTimerFunc(40, Timer, 0);
+	int time = 40 * (max_vel - velocity[track_point]) / max_vel + 10;
+	glutTimerFunc(time, Timer, 0);
+}
+
+void renderCylinder(float x1, float y1, float z1, float x2,float y2, float z2, float radius,int subdivisions,GLUquadricObj *quadric)
+{
+  float vx = x2-x1;
+  float vy = y2-y1;
+  float vz = z2-z1;
+
+  //handle the degenerate case of z1 == z2 with an approximation
+  if(vz == 0)
+      vz = .0001;
+
+  float v = sqrt( vx*vx + vy*vy + vz*vz );
+  float ax = 57.2957795*acos( vz/v );
+  if ( vz < 0.0 )
+      ax = -ax;
+  float rx = -vy*vz;
+  float ry = vx*vz;
+  glPushMatrix();
+
+  //draw the cylinder body
+  glTranslatef( x1,y1,z1 );
+  glRotatef(ax, rx, ry, 0.0);
+  gluQuadricOrientation(quadric,GLU_OUTSIDE);
+  gluCylinder(quadric, radius, radius, v, subdivisions, 1);
+
+  //draw the first cap
+  
+  //gluQuadricOrientation(quadric,GLU_INSIDE);
+  //gluDisk( quadric, 0.0, radius, subdivisions, 1);
+  //glTranslatef( 0,0,v );
+  
+  //draw the second cap
+  //gluQuadricOrientation(quadric,GLU_OUTSIDE);
+ // gluDisk( quadric, 0.0, radius, subdivisions, 1);
+  
+  glPopMatrix();
+  
+}
+
+void renderCylinder_convenient(float x1, float y1, float z1, float x2,float y2, float z2, float radius,int subdivisions)
+{
+  //the same quadric can be re-used for drawing many cylinders
+  GLUquadricObj *quadric=gluNewQuadric();
+  gluQuadricNormals(quadric, GLU_SMOOTH);
+  renderCylinder(x1,y1,z1,x2,y2,z2,radius,subdivisions,quadric);
+  gluDeleteQuadric(quadric); 
 }

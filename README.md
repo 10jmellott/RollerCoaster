@@ -21,15 +21,47 @@ the motion / view.
 
 ###completeness###
 ```
-Started
+2. Environment: 100%
+3. Appearance: 80%
+4. File Types: 100%
+5. Interpolation: 100%
+6. Physics: 80%
+7. Animation: 90%
 ```
 
 ###extra credit###
-+ None as of yet
++ Support Columns have been added
++ Color scheme is planned
++ Also, I attempted to create my own personal track. I figured out, relatively intuitively
+  that if the spline file numbers add up to 0, then the track is able to connect to itself.
+  That being said I took some time and created a track with such properties. The only thing
+  is that you ram your head against multiple support beams every so often. Attempting to 
+  fix one beam only made another section just as dangerous so as of now, the ride will end
+  up with a broken skull.
++ Anti-Aliased Tracks
 
 
 
 ##progress##
+###Ver. 2.0###
+Base Finished Product
+
+3D Rail Added
+Support Columns Added
+
+Lighting Added
+Anti-Aliasing Added
+
+Physics system smoothed out so that the system will work for all tracks
+Note: The physics system has yet to take into account the ```TRACK_DENSITY```
+
+Track turning around with limited velocity was removed
++ this is due to the fact that live roller coasters do not just turn around
++ In deference to this, the system was changed s.t. the program will pause after each run
+
+Code was used from https://github.com/curran/renderCyliner.git to manage the rotation for
+the cylinders. The code has been altered for this project.
+
 ###Ver. 1.5###
 Code has not been altered much. This submission won't be as visible in the code.
 Instead I worked out the values for the rails(perpendicular rails) on paper.
